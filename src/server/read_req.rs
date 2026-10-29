@@ -1,12 +1,11 @@
 use async_io::Async;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 use futures_lite::{AsyncRead, AsyncReadExt};
 use log::trace;
 use std::cmp;
 use std::collections::VecDeque;
 use std::io;
 use std::net::{IpAddr, SocketAddr, UdpSocket};
-use std::slice;
 use std::time::Duration;
 
 use crate::error::{Error, Result};
@@ -14,13 +13,13 @@ use crate::packet::{Opts, Packet, RwReq, PACKET_DATA_HEADER_LEN};
 use crate::server::{ServerConfig, DEFAULT_BLOCK_SIZE};
 use crate::utils::io_timeout;
 
-pub(crate) struct ReadRequest<'r, R>
+pub(crate) struct ReadRequest<R>
 where
     R: AsyncRead + Send,
 {
     peer: SocketAddr,
     socket: Async<UdpSocket>,
-    reader: &'r mut R,
+    reader: R,
     block_size: usize,
     timeout: Duration,
     max_send_retries: u32,
@@ -28,18 +27,31 @@ where
     window_size: usize,
 }
 
-impl<'r, R> ReadRequest<'r, R>
+impl<R> ReadRequest<R>
 where
     R: AsyncRead + Send + Unpin,
 {
     pub(crate) async fn init(
-        reader: &'r mut R,
+        reader: R,
         file_size: Option<u64>,
         peer: SocketAddr,
         req: &RwReq,
         config: ServerConfig,
         local_ip: IpAddr,
-    ) -> Result<ReadRequest<'r, R>> {
+    ) -> Result<ReadRequest<R>> {
+        let addr = SocketAddr::new(local_ip, 0);
+        let socket = UdpSocket::bind(addr).map_err(Error::Bind)?;
+        Self::with_socket(reader, file_size, peer, req, config, socket)
+    }
+
+    pub(crate) fn with_socket(
+        reader: R,
+        file_size: Option<u64>,
+        peer: SocketAddr,
+        req: &RwReq,
+        config: ServerConfig,
+        socket: UdpSocket,
+    ) -> Result<Self> {
         let oack_opts = build_oack_opts(&config, req, file_size);
 
         let block_size = oack_opts
@@ -59,8 +71,7 @@ where
             .map(|t| Duration::from_secs(u64::from(t)))
             .unwrap_or(config.timeout);
 
-        let addr = SocketAddr::new(local_ip, 0);
-        let socket = Async::<UdpSocket>::bind(addr).map_err(Error::Bind)?;
+        let socket = Async::new(socket).map_err(Error::Bind)?;
 
         Ok(ReadRequest {
             peer,
@@ -86,7 +97,7 @@ where
         }
     }
 
-    async fn try_handle(&mut self) -> Result<()> {
+    pub(crate) async fn try_handle(&mut self) -> Result<()> {
         let mut window: VecDeque<Bytes> =
             VecDeque::with_capacity(self.window_size);
         let mut block_id: u16;
@@ -148,18 +159,11 @@ where
             BytesMut::with_capacity(PACKET_DATA_HEADER_LEN + self.block_size);
         Packet::encode_data_head(block_id, &mut buffer);
 
-        // Read block in buffer
-        unsafe {
-            let uninit_buf = buffer.chunk_mut();
-            let data_buf = slice::from_raw_parts_mut(
-                uninit_buf.as_mut_ptr(),
-                uninit_buf.len(),
-            );
-
-            let len = self.read_block(data_buf).await?;
-            buffer.advance_mut(len);
-            Ok((buffer.split().freeze(), len < self.block_size))
-        }
+        // Initialized storage avoids exposing uninitialized bytes as &mut [u8].
+        let mut data = vec![0u8; self.block_size];
+        let len = self.read_block(&mut data).await?;
+        buffer.extend_from_slice(&data[..len]);
+        Ok((buffer.freeze(), len < self.block_size))
     }
 
     /// Sends packets contained in a window and waits for client to acknowledge them. Returns amount

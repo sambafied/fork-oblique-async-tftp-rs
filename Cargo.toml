@@ -37,7 +37,9 @@ tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros"] }
 # deps for tftpd-targz.rs
 async-compression = { version = "0.4.32", features = ["gzip", "futures-io"] }
 async-std = { version = "1.13.2", features = ["unstable"] }
-async-tar = "0.5.1"
+# 0.5.x pulls xattr 0.2, incompatible with current libc on Linux.
+# Example-only dependency; product library dependencies are unchanged.
+async-tar = "0.6.1"
 
 [features]
 external-client-tests = []
