@@ -13,8 +13,10 @@ Pin baseline: `6cb2ca259ce353175f0f191672fdcf5b69df1d0f`.
 ## Probe checklist
 
 - [ ] Compile product against public API only
-- [ ] Cancel stops IO and drops pin within deadline
-- [ ] Conservative path omits options up front
-- [ ] Bounded concurrent transfers
+- [x] Cancel stops IO and drops pin within deadline
+- [x] Conservative path omits options up front
+- [x] Bounded concurrent transfers (caller-owned futures; no hidden workers)
 
 MIT license preserved; attribute upstream oblique/async-tftp-rs.
+
+Implementation and executed fork evidence: [TRANSFER_SEAM_EVIDENCE.md](TRANSFER_SEAM_EVIDENCE.md). Product compile/adapter acceptance remains a separate immutable-pin probe.

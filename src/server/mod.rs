@@ -12,3 +12,6 @@ pub mod handlers;
 pub use self::builder::*;
 pub use self::handler::*;
 pub use self::server::*;
+
+/// Owned, cancellable read transfers without a server loop.
+pub mod transfer;

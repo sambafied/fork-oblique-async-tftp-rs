@@ -45,21 +45,21 @@ pub(crate) enum Packet<'a> {
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum Mode {
+pub enum Mode {
     Netascii,
     Octet,
     Mail,
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct RwReq {
+pub struct RwReq {
     pub filename: String,
     pub mode: Mode,
     pub opts: Opts,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
-pub(crate) struct Opts {
+pub struct Opts {
     pub block_size: Option<u16>,
     pub timeout: Option<u8>,
     pub transfer_size: Option<u64>,
